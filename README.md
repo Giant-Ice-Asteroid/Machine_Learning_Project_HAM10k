@@ -18,3 +18,35 @@ Basal cell carcinoma (bcc)
 Actinic keratoses (akiec)
 Vascular lesions (vas)
 Dermatofibroma (df)
+
+
+Approach:
+
+Data Exploration & Preprocessing
+
+-Understand the dataset structure
+-Preprocess images (resizing, normalization)
+-Handle class imbalance
+-Split into train/validation/test sets
+
+
+Model Building
+
+-Create a PyTorch dataset class
+-Design a CNN architecture (or use transfer learning)
+-Define loss function and optimizer
+
+
+Training Pipeline
+
+-Implement training loop with validation
+-Add logging functionality
+-Save model checkpoints
+
+
+Evaluation & Visualization
+
+-Evaluate on test set
+-Visualize predictions and feature maps
+-Analyze performance across classes
+-Identify potential areas for improvement
