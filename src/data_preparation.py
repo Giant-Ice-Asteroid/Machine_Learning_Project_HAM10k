@@ -1,35 +1,14 @@
 import os
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 from glob import glob
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from torchvision import transforms
-from PIL import Image
 from sklearn.model_selection import train_test_split
 from dataset_class import SkinLesionDataset
 
 # Define base directory -Sets the base directory to "data"
-base_skin_dir = os.path.join('data')
-
-
-# Use glob to find all jpg images in any subfolder of lesion_images
-# The * wildcard will match both HAM10000_images_part_1 and HAM10000_images_part_2
-imageid_path_dict = {os.path.splitext(os.path.basename(x))[0]: x
-                     for x in glob(os.path.join(base_skin_dir, 'lesion_images', '*', '*.jpg'))}
-
-# Print some stats to verify it's working
-print(f"Total images found: {len(imageid_path_dict)}")
-
-# Print a few examples
-print("\nSample entries:")
-sample_count = 0
-for name, path in imageid_path_dict.items():
-    print(f"{name}: {path}")
-    sample_count += 1
-    if sample_count >= 5:
-        break
+base_skin_dir = os.path.join("data")
 
 
 lesion_type_dict = {
@@ -42,23 +21,95 @@ lesion_type_dict = {
     'df': 'Dermatofibroma'
 }
 
-# Load the metadata
 
-try:
-    skin_df = pd.read_csv(os.path.join(base_skin_dir, 'HAM10000_metadata.csv'))
+############ TRANSFORMATIONS #################
+#In PyTorch, transformations are operations that modify data (= images) before feeding them to the model. 
+# They're not a class or method specifically, but rather a collection of functions from the torchvision.transforms module
+# 
+
+# define data transformations
+#transforms.Compose is a wrapper that chains multiple transforms together. When you apply this composed transform to an image, each transformation is applied in sequence.
+# note that aining transforms include augmentations, while validation and test transforms don't. This is because:
+# Training: We want to expose the model to variations (flips, rotations, etc.) to improve generalization
+# Validation/Testing: We want to evaluate the model on clean, unmodified images that represent real-world data
+# fundamental principle in ML
+data_transforms = {
+    'train': transforms.Compose([
+        transforms.Resize((224, 224)),  # Takes an image of any size and resizes it to 224×224 pixels: ensures all images have same dimensions for batch processing
+        transforms.RandomHorizontalFlip(),  # Flips the image horizontally with a 50% probability -> model learns that horizontal orientation doesn't change the diagnosis
+        transforms.RandomVerticalFlip(),    # as above, just flips the image vertically with a 50% probability
+        transforms.RandomRotation(20),      # Rotates the image by a random angle between -20 and +20 degrees->model learns that rotation doesn't affect classification
+        transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),  #Randomly changes brightness, contrast, saturation, hue->simulates diff lighting conditions and camera settings
+        transforms.ToTensor(), #Converts a PIL Image or numpy array to a PyTorch tensor->  Converts pixel values from 0-255 to 0-1 and changes dimensions from (height, width, channels) to (cs, h, w)
+        #Normalizes tensor images with mean and standard deviation. Under the hood: Applies the formula: (pixel - mean) / std for each channel (vals are from ImageNET)
+        # First parameter [0.485, 0.456, 0.406]: These are the mean values for each channel (R, G, B)
+        # Second parameter [0.229, 0.224, 0.225]: These are the standard deviation values for each channel
+        # These specific values are the per-channel means and standard deviations calculated across all images in the ImageNet dataset ( 1.2+ million images)
+        #  we use these specific values: we're using a ResNet-18 model pre-trained on ImageNet, work well across many computer vision tasks, standard practice
+        # When we normalize with these values, we're applying this formula to each pixel in each channel: normalized_pixel = (original_pixel - channel_mean)/channel_standard_deviation
+        # Normalized inputs tend to help models converge faster during training
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])  
+    ]),
+    'val': transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+    'test': transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+}
+
+# Use glob to find all jpg images in any subfolder of lesion_images
+# The * wildcard will match both HAM10000_images_part_1 and HAM10000_images_part_2
+def create_image_path_dict(base_dir=base_skin_dir):
+    """Create a dictionary mapping image IDs to file paths"""
+    imageid_path_dict = {os.path.splitext(os.path.basename(x))[0]: x
+        for x in glob(os.path.join(base_dir, 'lesion_images', '*', '*.jpg'))}
+    return imageid_path_dict
+
+
+"""
+# Print some stats to verify it's working
+print(f"Total images found: {len(imageid_path_dict)}")
+
+# Print a few examples
+print("\nSample entries:")
+sample_count = 0
+for name, path in imageid_path_dict.items():
+    print(f"{name}: {path}")
+    sample_count += 1
+    if sample_count >= 5:
+        break
+
+"""
+
+# Load the metadata
+def load_metadata(base_dir=base_skin_dir):
+    """Load metadata and map paths and classes"""
+    imageid_path_dict = create_image_path_dict(base_dir)
     
-    # Map image paths and cell types to the dataframe
-    skin_df['path'] = skin_df['image_id'].map(imageid_path_dict.get)
-    skin_df['lesion_type'] = skin_df['dx'].map(lesion_type_dict.get)
-    skin_df['lesion_type_idx'] = pd.Categorical(skin_df['lesion_type']).codes
+    try:
+        skin_df = pd.read_csv(os.path.join(base_dir, 'HAM10000_metadata.csv'))
+        
+        # Map image paths and cell types to the dataframe
+        skin_df['path'] = skin_df['image_id'].map(imageid_path_dict.get)
+        skin_df['lesion_type'] = skin_df['dx'].map(lesion_type_dict.get)
+        skin_df['lesion_type_idx'] = pd.Categorical(skin_df['lesion_type']).codes
     
-    # Display the head of the dataframe
-    print("\nDataframe head:")
-    print(skin_df.head())
-    
-except FileNotFoundError:
-    print("\nMetadata file not found. Skipping dataframe creation.")
-    
+        # Handle missing paths
+        print(f"Images with missing paths: {skin_df['path'].isna().sum()}")
+        skin_df = skin_df.dropna(subset=['path'])
+        print(f"Dataset size after cleaning: {len(skin_df)}")
+        
+        return skin_df
+    except FileNotFoundError:
+        print("\nMetadata file not found.")
+        return None
+
+"""
 # Examine class distribution
 class_counts = skin_df['lesion_type'].value_counts()
 print("Class distribution:")
@@ -92,7 +143,7 @@ def show_sample_images(df, num_samples=5):
     
     plt.tight_layout()
     plt.show()
-
+"""
 # Show samples from each class
 """for lesion_type in skin_df['lesion_type'].unique():
     print(f"Samples of {lesion_type}:")
@@ -105,7 +156,7 @@ def show_sample_images(df, num_samples=5):
     
 ###### DATA SPLITTING  ############
 
-
+"""
 # Check for and handle NaN values in the path column
 print(f"Images with missing paths: {skin_df['path'].isna().sum()}")
 skin_df = skin_df.dropna(subset=['path'])
@@ -124,6 +175,24 @@ train_df, val_df = train_test_split(train_val_df, test_size=0.20, random_state=4
 print(f"Training set size: {len(train_df)}")
 print(f"Validation set size: {len(val_df)}")
 print(f"Test set size: {len(test_df)}")
+"""
+def split_data(df, test_size=0.2, val_size=0.2, random_state=42):
+    """Split data into train, validation, and test sets"""
+    train_val_df, test_df = train_test_split(
+        df, test_size=test_size, random_state=random_state, 
+        stratify=df['lesion_type_idx']
+    )
+    
+    train_df, val_df = train_test_split(
+        train_val_df, test_size=val_size, random_state=random_state,
+        stratify=train_val_df['lesion_type_idx']
+    )
+    
+    print(f"Training set size: {len(train_df)}")
+    print(f"Validation set size: {len(val_df)}")
+    print(f"Test set size: {len(test_df)}")
+    
+    return train_df, val_df, test_df
 
 #####  HANDLING CLASS IMBALNCES ############
 
@@ -173,6 +242,7 @@ def oversample_minority_classes(df, target_column):
     
     return balanced_df
 
+"""
 # Apply oversampling to the training data only
 balanced_train_df = oversample_minority_classes(train_df, 'lesion_type')
 print(f"Balanced training set size: {len(balanced_train_df)}")
@@ -181,48 +251,10 @@ print(f"Balanced training set size: {len(balanced_train_df)}")
 balanced_class_counts = balanced_train_df['lesion_type'].value_counts()
 print("Balanced class distribution:")
 print(balanced_class_counts)
+"""
 
 
-############ TRANSFORMATIONS #################
-#In PyTorch, transformations are operations that modify data (= images) before feeding them to the model. 
-# They're not a class or method specifically, but rather a collection of functions from the torchvision.transforms module
-# 
-
-# Set up data transformations
-#transforms.Compose is a wrapper that chains multiple transforms together. When you apply this composed transform to an image, each transformation is applied in sequence.
-# note that aining transforms include augmentations, while validation and test transforms don't. This is because:
-# Training: We want to expose the model to variations (flips, rotations, etc.) to improve generalization
-# Validation/Testing: We want to evaluate the model on clean, unmodified images that represent real-world data
-# fundamental principle in ML
-data_transforms = {
-    'train': transforms.Compose([
-        transforms.Resize((224, 224)),  # Takes an image of any size and resizes it to 224×224 pixels: ensures all images have same dimensions for batch processing
-        transforms.RandomHorizontalFlip(),  # Flips the image horizontally with a 50% probability -> model learns that horizontal orientation doesn't change the diagnosis
-        transforms.RandomVerticalFlip(),    # as above, just flips the image vertically with a 50% probability
-        transforms.RandomRotation(20),      # Rotates the image by a random angle between -20 and +20 degrees->model learns that rotation doesn't affect classification
-        transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),  #Randomly changes brightness, contrast, saturation, hue->simulates diff lighting conditions and camera settings
-        transforms.ToTensor(), #Converts a PIL Image or numpy array to a PyTorch tensor->  Converts pixel values from 0-255 to 0-1 and changes dimensions from (height, width, channels) to (cs, h, w)
-        #Normalizes tensor images with mean and standard deviation. Under the hood: Applies the formula: (pixel - mean) / std for each channel (vals are from ImageNET)
-        # First parameter [0.485, 0.456, 0.406]: These are the mean values for each channel (R, G, B)
-        # Second parameter [0.229, 0.224, 0.225]: These are the standard deviation values for each channel
-        # These specific values are the per-channel means and standard deviations calculated across all images in the ImageNet dataset ( 1.2+ million images)
-        #  we use these specific values: we're using a ResNet-18 model pre-trained on ImageNet, work well across many computer vision tasks, standard practice
-        # When we normalize with these values, we're applying this formula to each pixel in each channel: normalized_pixel = (original_pixel - channel_mean)/channel_standard_deviation
-        # Normalized inputs tend to help models converge faster during training
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])  
-    ]),
-    'val': transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ]),
-    'test': transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ]),
-}
-
+"""
 # Create the datasets
 # The Dataset class is where transformations are actually applied to the data
 # When we create instances of our SkinLesionDataset, we pass in the appropriate transforms:
@@ -241,3 +273,29 @@ batch_size = 32
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+"""
+
+def prepare_data(batch_size=32, num_workers=0):
+    """Complete pipeline to prepare datasets and dataloaders"""
+    # Load data
+    skin_df = load_metadata()
+    if skin_df is None:
+        return None, None, None, None, None, None
+    
+    # Split data
+    train_df, val_df, test_df = split_data(skin_df)
+    
+    # Balance training data
+    balanced_train_df = oversample_minority_classes(train_df, 'lesion_type')
+    
+    # Create datasets
+    train_dataset = SkinLesionDataset(balanced_train_df, transform=data_transforms['train'])
+    val_dataset = SkinLesionDataset(val_df, transform=data_transforms['val'])
+    test_dataset = SkinLesionDataset(test_df, transform=data_transforms['test'])
+    
+    # Create data loaders
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    
+    return skin_df, train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader

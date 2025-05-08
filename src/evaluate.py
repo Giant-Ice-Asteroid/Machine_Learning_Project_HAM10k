@@ -1,13 +1,11 @@
 import torch
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
-from model import device, train_loader, val_loader, train_dataset, val_dataset, model, criterion, optimizer, scheduler
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from data_preparation import skin_df, test_loader
-from train import log_dir
 from skimage.transform import resize
+
 
 ##### EVALUATE AND VISUALIZE MODEL PREDICTIONS ###########
 
@@ -15,7 +13,7 @@ from skimage.transform import resize
 ### EVALUATE ####
 
 # Evaluation function
-def evaluate_model(model, dataloader, class_names):
+def evaluate_model(model, dataloader, class_names, device, log_dir=None):
     """
     
     Arguments:
@@ -63,7 +61,7 @@ def evaluate_model(model, dataloader, class_names):
     # target_names=class_names: Uses readable class names in the report (such as Melanoma instead of 1)
     
     report = classification_report(all_labels, all_preds, target_names=class_names, output_dict=True)
-    report_df = pd.Dataframe(report).transpose() # .transpose() to flip rows and columns for better display
+    report_df = pd.DataFrame(report).transpose() # .transpose() to flip rows and columns for better display
     print(report_df)
     
     # CONFUSION MATRIX
@@ -97,7 +95,7 @@ def evaluate_model(model, dataloader, class_names):
     plt.show()
         
     return accuracy, report_df, cm
-        
+"""    
 # executing evaluation
 # get the class names for the report from the dataframe
 class_names = skin_df["lesion_type"].unique().tolist()
@@ -108,11 +106,11 @@ accuracy, report_df, cm = evaluate_model(model, test_loader, class_names)
 
 # save classification report
 report_df.to_csv(os.path.join(log_dir, "classification_report.csv"))
-
+"""   
 #### VISUALISE PREDICTIONS ####
 
 # prediction visualization function
-def show_prediction_examples(model, dataloader, class_names, num_images=8):
+def show_prediction_examples(model, dataloader, class_names, device, num_images=8, log_dir=None):
     """
     Purpose:
     -> Model Verification: Confirms the model is working as expected
@@ -139,8 +137,8 @@ def show_prediction_examples(model, dataloader, class_names, num_images=8):
     with torch.no_grad(): #disablesd gradient calculate (not needed for just making predictions/visulizations)
         # looping through batches dewlivered by the data loader
         for i, (inputs, labels) in enumerate(dataloader): # enumerate gives the batch index "i"
-            inputs = input.to(device) # to gpu if possible
-            labels = input.to(device)
+            inputs = inputs.to(device) # to gpu if possible
+            labels = inputs.to(device)
             
             outputs = model(inputs) # model processes the batch, the outputs contains a score for each lesion class
             _, preds = torch.max(outputs, 1) # gets predicted class and takes the highest score index as "preds", actual score discarded (_)
@@ -151,7 +149,7 @@ def show_prediction_examples(model, dataloader, class_names, num_images=8):
                 
                 # convert tensor to image
                 # mvoes tensor to cpu, selects the j'th imagae from the batch and converts from pytorcvh tensor to numpy array
-                img = inputs.cpu()[j].to.numpy().transpose((1, 2, 0)) # .transpose((1, 2, 0)): rearranges dimensions back (pytorch -> matplotlib)
+                img = inputs.cpu()[j].numpy().transpose((1, 2, 0)) # .transpose((1, 2, 0)): rearranges dimensions back (pytorch -> matplotlib)
                 # denormalize the image:
                 mean = np.array([0.485, 0.456, 0.406])
                 std = np.array([0.229, 0.224, 0.225])
@@ -180,27 +178,31 @@ def show_prediction_examples(model, dataloader, class_names, num_images=8):
     for i, pred_info in enumerate(correct_preds[:4]): # loops through the first 4 correct predictions
         plt.subplot(2, 4, i + 1) # creates 2 x 4 grid of subplots (so 8 in total), selectcs i+1th position
         plt.imshow(pred_info["image"]) # shows the image in teh current subplot
-        plt.title(f"True: {pred_info["true"]}\nPred: {pred_info["pred"]}")
+        plt.title(f"True: {pred_info['true']}\nPred: {pred_info['pred']}")
         plt.axis("off") # removes the y and x axes from view
         
     # displaying some incorrect predictions
     for i, pred_info in enumerate(incorrect_preds[:4]): # loops through the first INcorrect predictions
         plt.subplot(2, 4, i +5) #places them in position 5-8 (bottom row)
         plt.imshow(pred_info["image"])
-        plt.title(f"True: {pred_info["true"]}\nPred: {pred_info["pred"]}")
+        plt.title(f"True: {pred_info['true']}\nPred: {pred_info['pred']}")
         plt.axis("off")
         
     plt.tight_layout() # adjust spacing
-    plt.savefig(os.path.join(log_dir, "prediction_examples.png"))
+    
+    if log_dir:
+        plt.savefig(os.path.join(log_dir, "prediction_examples.png"))
+        
     plt.show()
 
+"""
 # call the function to visualize predictions
 show_prediction_examples(model, test_loader, class_names)
-
+"""
 
 ############ VISUALISE MODEL FEATURES ###################
 
-def visualize_model_features(model, dataloader, class_names):
+def visualize_model_features(model, dataloader, class_names, device, log_dir=None):
     
     """
     Visualization that helps understanding what the model "sees" internally..
@@ -277,12 +279,14 @@ def visualize_model_features(model, dataloader, class_names):
             plt.axis('off')
         
     plt.tight_layout()
-    plt.savefig(os.path.join(log_dir, 'feature_maps.png'))
-    plt.show()
     
+    if log_dir:
+        plt.savefig(os.path.join(log_dir, 'feature_maps.png'))
+    plt.show()
+"""  
 # calling the visualize features function
 visualize_model_features(model, test_loader, class_names) # uses the trained model, gets data from test_loader and class_names for labels
-
+"""  
 ############ GRAD-CAM VISUALIZATION ############
 
 
@@ -376,8 +380,9 @@ def generate_gradcam(model, input_tensor, target_layer_name="layer4"):
     
     return cam, pred_class # returns heatmap and predicted class
 
+
 # creating visualizations with the grad cam function just made
-def show_gradcam_examples(model, dataloader, class_names, num_images=4):
+def show_gradcam_examples(model, dataloader, class_names, device, num_images=4, log_dir=None):
     """
     Function for displaying Grad_CAM visualizations for a number of images
     
@@ -388,7 +393,7 @@ def show_gradcam_examples(model, dataloader, class_names, num_images=4):
     # get images for visualization
     images_so_far = 0
     
-    fig = plt.figure(figsize=(15,10))
+    plt.figure(figsize=(15,10))
     
     # iterate through batches of images
     for inputs, labels in dataloader:
@@ -433,7 +438,7 @@ def show_gradcam_examples(model, dataloader, class_names, num_images=4):
             #overlay grad-cam as heatmap
             # cmap='jet': Uses a colormap ranging from blue (low) to red (high)
             # alpha=0.5: Sets transparency (50% transparent)
-            plt.imsave(cam, cmap="jet", alpha=0.5)
+            plt.imshow(cam, cmap="jet", alpha=0.5)
             true_label = class_names[labels[j]]
             pred_label = class_names[pred_class.item()] #.item(): converts a single-element tensor to a python number
             plt.title(f"True: {true_label}\nPred: {pred_label}")
@@ -445,9 +450,8 @@ def show_gradcam_examples(model, dataloader, class_names, num_images=4):
             break 
             
     plt.tight_layout()
-    plt.savefig(os.path.join(log_dir, "gradcam_examples.png"))
+    
+    if log_dir:        
+        plt.savefig(os.path.join(log_dir, "gradcam_examples.png"))
     plt.show()
         
-    
-#calling the function
-show_gradcam_examples(model, test_loader, class_names)

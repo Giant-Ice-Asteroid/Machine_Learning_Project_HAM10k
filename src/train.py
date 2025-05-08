@@ -1,26 +1,19 @@
 import os
-import pandas as pd
-from glob import glob
 import torch
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms
-from PIL import Image
-from sklearn.model_selection import train_test_split
 import time
 import copy
 from datetime import datetime
 import matplotlib.pyplot as plt
-import numpy as np
-import os
-from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
-from model import device, train_loader, val_loader, train_dataset, val_dataset, model, criterion, optimizer, scheduler
+
 
 ####  Training Loop with Logging ####
 
 
 # Create a directory for logs and checkpoints
-log_dir = os.path.join('logs', datetime.now().strftime('%Y%m%d_%H%M%S')) #Creates a uniquely named directory based on the current date and time (e.g., "logs/20250506_142030")
-os.makedirs(log_dir, exist_ok=True) #Creates this directory if it doesn't exist (exist_ok=True prevents errors if it already exists)
+def create_log_dir():
+    log_dir = os.path.join('logs', datetime.now().strftime('%Y%m%d_%H%M%S')) #Creates a uniquely named directory based on the current date and time (e.g., "logs/20250506_142030")
+    os.makedirs(log_dir, exist_ok=True) #Creates this directory if it doesn't exist (exist_ok=True prevents errors if it already exists)
+    return log_dir
 
 # Function to log metrics to a file
 # Takes performance metrics as input
@@ -30,13 +23,36 @@ def log_metrics(log_file, epoch, train_loss, train_acc, val_loss, val_acc):
     with open(log_file, 'a') as f:
         f.write(f"{epoch},{train_loss:.4f},{train_acc:.4f},{val_loss:.4f},{val_acc:.4f}\n")
 
-# Create a log file
-#Opens a new file in 'write' mode ('w') which will overwrite any existing file
-# Writes the header row with column names
-log_file = os.path.join(log_dir, 'training_log.csv')
-with open(log_file, 'w') as f:
-    f.write("epoch,train_loss,train_acc,val_loss,val_acc\n")
 
+
+
+# Function to plot training history
+def plot_training_history(history, log_dir):
+    plt.figure(figsize=(12, 5))
+    
+    # Plot loss
+    plt.subplot(1, 2, 1) # Creates a 1×2 grid of subplots (two side-by-side plots). Third number (1): Which subplot position to activate (counting left-to-right, top-to-bottom)
+    plt.plot(history['train_loss'], label='Training Loss') # Draws lines for training and validation metrics, 
+    plt.plot(history['val_loss'], label='Validation Loss') # Each point represents one epoch
+    plt.title('Loss vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    
+    # Plot accuracy
+    plt.subplot(1, 2, 2)
+    plt.plot(history['train_acc'], label='Training Accuracy')
+    plt.plot(history['val_acc'], label='Validation Accuracy')
+    plt.title('Accuracy vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(log_dir, 'training_history.png'))
+    plt.show()
+    
+    
 ################## TRAINING FUNCTION ############
 
 # Function to train the model. Parameters:
@@ -46,7 +62,18 @@ with open(log_file, 'w') as f:
 # dataloaders: Dictionary with 'train' and 'val' data loaders
 # dataset_sizes: Number of samples in each dataset
 # num_epochs: How many complete passes through the data to perform (default=25)
-def train_model(model, criterion, optimizer, scheduler, dataloaders, dataset_sizes, num_epochs=25):
+def train_model(model, criterion, optimizer, scheduler, dataloaders, dataset_sizes, device, num_epochs=20, log_dir=None):
+    
+    if log_dir is None:
+        log_dir = create_log_dir()
+        
+    # Create a log file
+    #Opens a new file in 'write' mode ('w') which will overwrite any existing file
+    # Writes the header row with column names
+    log_file = os.path.join(log_dir, 'training_log.csv')
+    with open(log_file, 'w') as f:
+        f.write("epoch,train_loss,train_acc,val_loss,val_acc\n")    
+    
     since = time.time() #since = time.time(): Records the start time to measure total training duration
     
     # Initialize history dictionaries ->  Empty lists that will store metrics for each epoch
@@ -66,7 +93,7 @@ def train_model(model, criterion, optimizer, scheduler, dataloaders, dataset_siz
     
     # Epoch Loop
     for epoch in range(num_epochs):
-        print(f'Epoch {epoch}/{num_epochs - 1}')
+        print(f'Epoch {epoch}/{num_epochs}')
         print('-' * 10)
         
         # Training/Validation Phase Loop
@@ -79,12 +106,22 @@ def train_model(model, criterion, optimizer, scheduler, dataloaders, dataset_siz
             
             running_loss = 0.0 #Accumulates the loss value across all batches in this phase
             running_corrects = 0 # Counts total number of correct predictions in this phase
-
+            batch_count = 0
+            
+            # Time tracking for batches
+            batch_start = time.time()
             
             # Batch Loop
             # Processes one batch of data at a time
             # Moving to device: Transfers the input images and their labels to the GPU (if available)
             for inputs, labels in dataloaders[phase]:
+                
+                # Print progress for every batch to see where it might be stuck
+                batch_count += 1
+                batch_time = time.time() - batch_start
+                print(f"  Processing batch {batch_count}/{len(dataloaders[phase])}, last batch took {batch_time:.2f}s")
+                batch_start = time.time()  # Reset timer for next batch
+                
                 inputs = inputs.to(device)
                 labels = labels.to(device)
                 
@@ -92,7 +129,7 @@ def train_model(model, criterion, optimizer, scheduler, dataloaders, dataset_siz
                 # Without this, gradients would accumulate and cause incorrect updates
                 optimizer.zero_grad()
                 
-
+                forward_start = time.time()
                 # torch.set_grad_enabled(phase == 'train'):Context manager that Tracks gradients during training phase + Disables gradient tracking during validation (saves memory and computation)
                 # outputs = model(inputs): Forward pass - the model processes the batch of images ->  Returns raw scores for each class (logits)
                 # _, preds = torch.max(outputs, 1): Gets the predicted class for each image. 
@@ -113,6 +150,8 @@ def train_model(model, criterion, optimizer, scheduler, dataloaders, dataset_siz
                         loss.backward()
                         optimizer.step()
                 
+                forward_time = time.time() - forward_start
+                print(f"    Forward/backward pass took {forward_time:.2f}s")
                 # Batch Statistics Accumulation
                 #loss.item() gets the scalar value of the loss
                 # Multiplied by batch size (inputs.size(0)) to get total loss -> We add this to our running total
@@ -193,36 +232,13 @@ def train_model(model, criterion, optimizer, scheduler, dataloaders, dataset_siz
     # Plot training history
     plot_training_history(history, log_dir)
     
-    return model, history # Provides access to both the trained model and the training history
+    return model, history, log_dir # Provides access to both the trained model and the training history
 
-# Function to plot training history
-def plot_training_history(history, log_dir):
-    plt.figure(figsize=(12, 5))
-    
-    # Plot loss
-    plt.subplot(1, 2, 1) # Creates a 1×2 grid of subplots (two side-by-side plots). Third number (1): Which subplot position to activate (counting left-to-right, top-to-bottom)
-    plt.plot(history['train_loss'], label='Training Loss') # Draws lines for training and validation metrics, 
-    plt.plot(history['val_loss'], label='Validation Loss') # Each point represents one epoch
-    plt.title('Loss vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-    
-    # Plot accuracy
-    plt.subplot(1, 2, 2)
-    plt.plot(history['train_acc'], label='Training Accuracy')
-    plt.plot(history['val_acc'], label='Validation Accuracy')
-    plt.title('Accuracy vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Accuracy')
-    plt.legend()
-    
-    plt.tight_layout()
-    plt.savefig(os.path.join(log_dir, 'training_history.png'))
-    plt.show()
 
 #### Prepare for training
 
+
+"""
 # dataloaders dictionary: Organizes data loaders by phase for easy access
 dataloaders = {
     'train': train_loader,
@@ -238,3 +254,4 @@ dataset_sizes = {
 # Train the model
 num_epochs = 20 # num_epochs=20: Sets how many complete passes through the training data
 model, history = train_model(model, criterion, optimizer, scheduler, dataloaders, dataset_sizes, num_epochs=num_epochs) # : Calls our training function and stores results
+"""

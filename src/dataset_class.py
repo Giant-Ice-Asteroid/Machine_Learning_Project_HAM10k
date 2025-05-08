@@ -52,5 +52,6 @@ class SkinLesionDataset(Dataset):
         
         # Get the label
         label = self.dataframe.iloc[idx]['lesion_type_idx']
+        label = torch.tensor(int(label), dtype=torch.long)  # Convert to integer then to torch.long tensor
         
         return image, label
