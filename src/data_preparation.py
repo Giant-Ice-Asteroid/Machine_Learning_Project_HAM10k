@@ -1,11 +1,18 @@
 import os
 import pandas as pd
 from glob import glob
-import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from sklearn.model_selection import train_test_split
-from dataset_class import SkinLesionDataset
+# Fix the import by using relative import
+try:
+    # When running as a module
+    from .dataset_class import SkinLesionDataset
+except ImportError:
+    # When running directly
+    from dataset_class import SkinLesionDataset
+
+
 
 # Define base directory -Sets the base directory to "data"
 base_skin_dir = os.path.join("data")
@@ -280,7 +287,7 @@ def prepare_data(batch_size=32, num_workers=0):
     # Load data
     skin_df = load_metadata()
     if skin_df is None:
-        return None, None, None, None, None, None
+        return None, None, None, None, None, None, None
     
     # Split data
     train_df, val_df, test_df = split_data(skin_df)
@@ -293,9 +300,17 @@ def prepare_data(batch_size=32, num_workers=0):
     val_dataset = SkinLesionDataset(val_df, transform=data_transforms['val'])
     test_dataset = SkinLesionDataset(test_df, transform=data_transforms['test'])
     
-    # Create data loaders
+    # Print some dataset shapes for debugging
+    print(f"Test dataset length: {len(test_dataset)}")
+    test_img, test_label = test_dataset[0]
+    print(f"Sample image shape: {test_img.shape}, label: {test_label}")
+    
+    # Create data loaders with smaller batch size for visualizations
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    
+    # Use a smaller batch size for test loader to avoid issues during visualization
+    test_batch_size = min(batch_size, 4)  # Ensure small batches for test loader
+    test_loader = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=False, num_workers=num_workers)
     
     return skin_df, train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader

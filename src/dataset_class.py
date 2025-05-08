@@ -1,13 +1,9 @@
-import os
+
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from glob import glob
 import torch
 from torch.utils.data import Dataset
-from torchvision import transforms
 from PIL import Image
-from sklearn.model_selection import train_test_split
+
 
 class SkinLesionDataset(Dataset):
     def __init__(self, dataframe, transform=None):

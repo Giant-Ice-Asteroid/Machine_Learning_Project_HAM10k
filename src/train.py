@@ -93,7 +93,7 @@ def train_model(model, criterion, optimizer, scheduler, dataloaders, dataset_siz
     
     # Epoch Loop
     for epoch in range(num_epochs):
-        print(f'Epoch {epoch}/{num_epochs}')
+        print(f'Epoch {epoch}/{num_epochs - 1}')
         print('-' * 10)
         
         # Training/Validation Phase Loop
@@ -107,9 +107,11 @@ def train_model(model, criterion, optimizer, scheduler, dataloaders, dataset_siz
             running_loss = 0.0 #Accumulates the loss value across all batches in this phase
             running_corrects = 0 # Counts total number of correct predictions in this phase
             batch_count = 0
+            total_batches = len(dataloaders[phase])
             
-            # Time tracking for batches
-            batch_start = time.time()
+            # Progress tracking
+            last_progress_update = time.time()
+            update_interval = 5  # Print progress every 5 seconds
             
             # Batch Loop
             # Processes one batch of data at a time
@@ -118,9 +120,13 @@ def train_model(model, criterion, optimizer, scheduler, dataloaders, dataset_siz
                 
                 # Print progress for every batch to see where it might be stuck
                 batch_count += 1
-                batch_time = time.time() - batch_start
-                print(f"  Processing batch {batch_count}/{len(dataloaders[phase])}, last batch took {batch_time:.2f}s")
-                batch_start = time.time()  # Reset timer for next batch
+                
+                # Print progress update every 5 seconds instead of for every batch
+                current_time = time.time()
+                if current_time - last_progress_update >= update_interval:
+                    progress = batch_count / total_batches * 100
+                    print(f"  {phase} progress: {batch_count}/{total_batches} batches ({progress:.1f}%)")
+                    last_progress_update = current_time
                 
                 inputs = inputs.to(device)
                 labels = labels.to(device)

@@ -1,14 +1,36 @@
 import torch
 import argparse # used for parsing command-line arguments
 import torch.multiprocessing as mp
+import time
+import os
+import sys
+from datetime import datetime 
+import traceback
+
 # from my modules
+"""
 from data_preparation import prepare_data
 from model import create_model, create_criterion, create_optimizer, create_scheduler, device
 from train import train_model
 from evaluate import evaluate_model, show_prediction_examples, visualize_model_features, show_gradcam_examples
-from utils import set_seed
-import time
+from utils import set_seed """
 
+# Handle imports differently based on how the script is run
+try:
+    # When running as a module
+    from .data_preparation import prepare_data
+    from .model import create_model, create_criterion, create_optimizer, create_scheduler, device
+    from .train import train_model
+    from .evaluate import evaluate_model, show_prediction_examples, visualize_model_features, show_gradcam_examples
+    from .utils import set_seed
+except ImportError:
+    # When running directly
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.data_preparation import prepare_data
+    from src.model import create_model, create_criterion, create_optimizer, create_scheduler, device
+    from src.train import train_model
+    from src.evaluate import evaluate_model, show_prediction_examples, visualize_model_features, show_gradcam_examples
+    from src.utils import set_seed
 
 
 def main():
@@ -24,6 +46,9 @@ def main():
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--num_workers', type=int, default=0, help='Number of worker processes for data loading')
+    parser.add_argument('--pretrained', type=str, default='', help='Path to pre-trained model')
+    parser.add_argument('--skip_training', action='store_true', help='Skip training and use pre-trained model')
+    parser.add_argument('--eval_only', default=True, action='store_true', help='Only run evaluation')
     args = parser.parse_args()
     
     
@@ -56,11 +81,42 @@ def main():
         'val': len(val_dataset)
     }
     
+    # Get class names
+    class_names = skin_df['lesion_type'].unique().tolist()
+    num_classes = len(class_names)
+    
     # Step 2: Create Model
     print("Creating model...")
     start_time = time.time()
-    num_classes = len(skin_df['lesion_type'].unique())
     model = create_model(num_classes)
+    
+    # Load pre-trained model if specified
+    log_dir = None
+    if args.pretrained and os.path.exists(args.pretrained):
+        print(f"Loading pre-trained model from {args.pretrained}")
+        try:
+            checkpoint = torch.load(args.pretrained)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            print("Model state dictionary loaded successfully")
+            log_dir = os.path.dirname(args.pretrained)
+            print(f"Using log directory: {log_dir}")
+            if 'accuracy' in checkpoint:
+                print(f"Model loaded, validation accuracy: {checkpoint['accuracy']}")
+            else:
+                print("Model loaded, validation accuracy not found in checkpoint")
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            traceback.print_exc()
+    elif args.pretrained:
+        # Only show warning if a path was specified but doesn't exist
+        print(f"Warning: Specified pretrained model path '{args.pretrained}' does not exist!")
+               
+    # Ensure log_dir exists even in evaluation mode
+    if log_dir is None or not os.path.exists(log_dir):
+        log_dir = os.path.join('logs', 'eval_' + datetime.now().strftime('%Y%m%d_%H%M%S'))
+        os.makedirs(log_dir, exist_ok=True)
+        print(f"Created new log directory: {log_dir}")  
+        
     criterion = create_criterion()
     optimizer = create_optimizer(model, learning_rate=args.lr)
     scheduler = create_scheduler(optimizer)
@@ -68,27 +124,34 @@ def main():
     
     
     # Step 3: Train Model
-    print(f"Training for {args.num_epochs} epochs...")
-    start_time = time.time()
-    model, history, log_dir = train_model(
-        model, criterion, optimizer, scheduler, 
-        dataloaders, dataset_sizes, device,
-        num_epochs=args.num_epochs
-    )
-    print(f"Training took {time.time() - start_time:.2f} seconds")
-    
+    if not args.skip_training and not args.eval_only:
+        print(f"Training for {args.num_epochs} epochs...")
+        start_time = time.time()
+        model, history, log_dir = train_model(
+            model, criterion, optimizer, scheduler, 
+            dataloaders, dataset_sizes, device,
+            num_epochs=args.num_epochs,
+            log_dir=log_dir #pass existing log_dir
+        )
+        print(f"Training took {time.time() - start_time:.2f} seconds")
+        
     
     # Step 4: Evaluate Model
-    print("Evaluating model...")
-    class_names = skin_df['lesion_type'].unique().tolist()
-    accuracy, report_df, cm = evaluate_model(model, test_loader, class_names, device, log_dir)
+    if args.eval_only or not args.skip_training:
+        print("Evaluating model...")
+        accuracy, report_df, cm = evaluate_model(model, test_loader, class_names, device, log_dir)
     
     # Step 5: Visualizations
     print("Generating visualizations...")
-    show_prediction_examples(model, test_loader, class_names, device, log_dir=log_dir)
-    visualize_model_features(model, test_loader, class_names, device, log_dir=log_dir)
-    show_gradcam_examples(model, test_loader, class_names, device, log_dir=log_dir)
-    
+    try:
+        show_prediction_examples(model, test_loader, class_names, device, log_dir=log_dir)
+        visualize_model_features(model, test_loader, class_names, device, log_dir=log_dir)
+        show_gradcam_examples(model, test_loader, class_names, device, log_dir=log_dir)
+    except Exception as e:
+        print(f"Error during visualization: {e}")
+                
+        traceback.print_exc()
+        
     print(f"Done! All results saved to {log_dir}")
 
 if __name__ == "__main__":
