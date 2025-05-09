@@ -48,7 +48,7 @@ def main():
     parser.add_argument('--num_workers', type=int, default=0, help='Number of worker processes for data loading')
     parser.add_argument('--pretrained', type=str, default='', help='Path to pre-trained model')
     parser.add_argument('--skip_training', action='store_true', help='Skip training and use pre-trained model')
-    parser.add_argument('--eval_only', default=True, action='store_true', help='Only run evaluation')
+    parser.add_argument('--eval_only', action='store_true', help='Only run evaluation')
     args = parser.parse_args()
     
     
