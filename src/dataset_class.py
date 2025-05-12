@@ -30,24 +30,24 @@ class SkinLesionDataset(Dataset):
         # Get the path and label for this index
         img_path = self.dataframe.iloc[idx]['path']
         
-        # Handle cases where the path might be missing
+        # handles cases where the path might be missing
         if img_path is None or pd.isna(img_path):
-            # Create a blank image as a fallback
+            # creates a blank image as a fallback
             image = Image.new('RGB', (224, 224), color='black')
         else:
-            # Open the image
+            # open the image
             try:
                 image = Image.open(img_path).convert('RGB')
             except Exception as e:
                 print(f"Error loading image {img_path}: {e}")
                 image = Image.new('RGB', (224, 224), color='black')
         
-        # Apply transformations if any
+        # apply transformations if any
         if self.transform:
             image = self.transform(image)
         
-        # Get the label
+        # get the label
         label = self.dataframe.iloc[idx]['lesion_type_idx']
-        label = torch.tensor(int(label), dtype=torch.long)  # Convert to integer then to torch.long tensor
+        label = torch.tensor(int(label), dtype=torch.long)  # converts to integer then to torch.long tensor
         
         return image, label

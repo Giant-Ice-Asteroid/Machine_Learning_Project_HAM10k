@@ -239,25 +239,3 @@ def train_model(model, criterion, optimizer, scheduler, dataloaders, dataset_siz
     plot_training_history(history, log_dir)
     
     return model, history, log_dir # Provides access to both the trained model and the training history
-
-
-#### Prepare for training
-
-
-"""
-# dataloaders dictionary: Organizes data loaders by phase for easy access
-dataloaders = {
-    'train': train_loader,
-    'val': val_loader
-}
-
-#dataset_sizes: Stores the number of samples in each dataset
-dataset_sizes = {
-    'train': len(train_dataset),
-    'val': len(val_dataset)
-}
-
-# Train the model
-num_epochs = 20 # num_epochs=20: Sets how many complete passes through the training data
-model, history = train_model(model, criterion, optimizer, scheduler, dataloaders, dataset_sizes, num_epochs=num_epochs) # : Calls our training function and stores results
-"""

@@ -4,7 +4,7 @@ from glob import glob
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from sklearn.model_selection import train_test_split
-# Fix the import by using relative import
+# fix for import issues..:
 try:
     # When running as a module
     from .dataset_class import SkinLesionDataset
@@ -78,21 +78,6 @@ def create_image_path_dict(base_dir=base_skin_dir):
     return imageid_path_dict
 
 
-"""
-# Print some stats to verify it's working
-print(f"Total images found: {len(imageid_path_dict)}")
-
-# Print a few examples
-print("\nSample entries:")
-sample_count = 0
-for name, path in imageid_path_dict.items():
-    print(f"{name}: {path}")
-    sample_count += 1
-    if sample_count >= 5:
-        break
-
-"""
-
 # Load the metadata
 def load_metadata(base_dir=base_skin_dir):
     """Load metadata and map paths and classes"""
@@ -116,80 +101,24 @@ def load_metadata(base_dir=base_skin_dir):
         print("\nMetadata file not found.")
         return None
 
-"""
-# Examine class distribution
-class_counts = skin_df['lesion_type'].value_counts()
-print("Class distribution:")
-print(class_counts)
-print(f"Percentage of 'Melanocytic nevi': {class_counts['Melanocytic nevi'] / len(skin_df) * 100:.2f}%")
-
-# Visualize the class distribution
-plt.figure(figsize=(10, 6))
-class_counts.plot(kind='bar')
-plt.title('Class Distribution in HAM10000 Dataset')
-plt.xlabel('Lesion Type')
-plt.ylabel('Count')
-plt.xticks(rotation=45, ha='right')
-plt.tight_layout()
-plt.show()
-
-# Display some sample images to understand what we're working with
-def show_sample_images(df, num_samples=5):
-    fig, axes = plt.subplots(1, num_samples, figsize=(15, 3))
-    
-    for i in range(num_samples):
-        # Get a random sample from each class
-        sample = df.sample(1).iloc[0]
-        img_path = sample['path']
-        
-        if img_path is not None:
-            img = Image.open(img_path)
-            axes[i].imshow(img)
-            axes[i].set_title(f"{sample['lesion_type']}\n{img.size}")
-            axes[i].axis('off')
-    
-    plt.tight_layout()
-    plt.show()
-"""
-# Show samples from each class
-"""for lesion_type in skin_df['lesion_type'].unique():
-    print(f"Samples of {lesion_type}:")
-    class_df = skin_df[skin_df['lesion_type'] == lesion_type]
-    show_sample_images(class_df)"""
-    
-    
-
 
     
 ###### DATA SPLITTING  ############
 
-"""
-# Check for and handle NaN values in the path column
-print(f"Images with missing paths: {skin_df['path'].isna().sum()}")
-skin_df = skin_df.dropna(subset=['path'])
-print(f"Dataset size after removing rows with missing paths: {len(skin_df)}")
+
 
 # Split the data into train, validation, and test sets
 # First, split off the test set (20% of data)
 # random_state sets the seed for the random number generator,  42 is arbitrary - any integer would work
 # stratify=skin_df['lesion_type_idx'] ensures that each split maintains the same class distribution as the original dataset
-# without stratification, you might end up with some classes missing entirely from a split
-train_val_df, test_df = train_test_split(skin_df, test_size=0.20, random_state=42, stratify=skin_df['lesion_type_idx'])
-
-# Then split the train_val set into train and validation (80% train, 20% validation of the remaining data)
-train_df, val_df = train_test_split(train_val_df, test_size=0.20, random_state=42, stratify=train_val_df['lesion_type_idx'])
-
-print(f"Training set size: {len(train_df)}")
-print(f"Validation set size: {len(val_df)}")
-print(f"Test set size: {len(test_df)}")
-"""
+# without stratification, one might end up with some classes missing entirely from a split
 def split_data(df, test_size=0.2, val_size=0.2, random_state=42):
     """Split data into train, validation, and test sets"""
     train_val_df, test_df = train_test_split(
         df, test_size=test_size, random_state=random_state, 
         stratify=df['lesion_type_idx']
     )
-    
+    # Then split the train_val set into train and validation (80% train, 20% validation of the remaining data)
     train_df, val_df = train_test_split(
         train_val_df, test_size=val_size, random_state=random_state,
         stratify=train_val_df['lesion_type_idx']
@@ -203,19 +132,19 @@ def split_data(df, test_size=0.2, val_size=0.2, random_state=42):
 
 #####  HANDLING CLASS IMBALNCES ############
 
-# Handle class imbalance using oversampling for the training set
-# This duplicates samples from minority classes to balance the dataset
+# handles class imbalance using oversampling for the training set
+# --> duplicates samples from minority classes to balance the dataset
 def oversample_minority_classes(df, target_column):
-    # Get the class counts
+    # get the class counts
     class_counts = df[target_column].value_counts()
     max_class_count = class_counts.max()
     
-    # Create a list to hold the balanced dataframe
+    # create a list to hold the balanced dataframe
     balanced_dfs = []
     
-    # Loops through each class and its count (e.g., 'nevi': 7000, 'melanoma': 1000, etc.
+    # loops through each class and its count e.g., 'nevi': 7000, 'melanoma': 1000, etc..
     for class_name, count in class_counts.items():
-        # Creates a subset of the dataframe containing only rows of the current class
+        # creates a subset of the dataframe containing only rows of the current class
         # i.e if class_name is 'melanoma', class_df contains only melanoma samples
         class_df = df[df[target_column] == class_name]
                 
@@ -249,38 +178,8 @@ def oversample_minority_classes(df, target_column):
     
     return balanced_df
 
-"""
-# Apply oversampling to the training data only
-balanced_train_df = oversample_minority_classes(train_df, 'lesion_type')
-print(f"Balanced training set size: {len(balanced_train_df)}")
+######################### DATASETS AND DATALOADERS ###########################
 
-# Verify the class distribution in the balanced training set
-balanced_class_counts = balanced_train_df['lesion_type'].value_counts()
-print("Balanced class distribution:")
-print(balanced_class_counts)
-"""
-
-
-"""
-# Create the datasets
-# The Dataset class is where transformations are actually applied to the data
-# When we create instances of our SkinLesionDataset, we pass in the appropriate transforms:
-train_dataset = SkinLesionDataset(balanced_train_df, transform=data_transforms['train'])
-val_dataset = SkinLesionDataset(val_df, transform=data_transforms['val'])
-test_dataset = SkinLesionDataset(test_df, transform=data_transforms['test'])
-
-# Create data loaders
-# DataLoader is a function from the torch library 
-# The DataLoader class:
-# -> Wraps a Dataset and efficiently loads batches of data
-# -> Handles batching, shuffling, and parallel data loading
-# -> Manages multiple "workers" (=parallel processes) to load data faster
-# When the DataLoader function requests a sample from the Dataset
-batch_size = 32
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
-"""
 
 def prepare_data(batch_size=32, num_workers=0):
     """Complete pipeline to prepare datasets and dataloaders"""
@@ -296,14 +195,25 @@ def prepare_data(batch_size=32, num_workers=0):
     balanced_train_df = oversample_minority_classes(train_df, 'lesion_type')
     
     # Create datasets
+    # Create the datasets
+    # The Dataset class is where transformations are actually applied to the data
+    # When we create instances of our SkinLesionDataset, we pass in the appropriate transforms
     train_dataset = SkinLesionDataset(balanced_train_df, transform=data_transforms['train'])
     val_dataset = SkinLesionDataset(val_df, transform=data_transforms['val'])
     test_dataset = SkinLesionDataset(test_df, transform=data_transforms['test'])
     
-    # Print some dataset shapes for debugging
+    # print some dataset shapes for debugging..
     print(f"Test dataset length: {len(test_dataset)}")
     test_img, test_label = test_dataset[0]
     print(f"Sample image shape: {test_img.shape}, label: {test_label}")
+    
+    # Create data loaders
+    
+    # DataLoader is a function from the torch library 
+    # The DataLoader class:
+    # -> Wraps a Dataset and efficiently loads batches of data
+    # -> Handles batching, shuffling, and parallel data loading
+    # -> Manages multiple "workers" (=parallel processes) to load data faster
     
     # Create data loaders with smaller batch size for visualizations
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)

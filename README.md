@@ -1,53 +1,92 @@
-Original Data Source (via Kaggle)
+# Skin Lesion Classification using Machine Learning
 
-Original Challenge: https://challenge2018.isic-archive.com
-https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/DBW86T
-[1] Noel Codella, Veronica Rotemberg, Philipp Tschandl, M. Emre Celebi, Stephen Dusza, David Gutman, Brian Helba, Aadi Kalloo, Konstantinos Liopyris, Michael Marchetti, Harald Kittler, Allan Halpern: “Skin Lesion Analysis Toward Melanoma Detection 2018: A Challenge Hosted by the International Skin Imaging Collaboration (ISIC)”, 2018; https://arxiv.org/abs/1902.03368
-[2] Tschandl, P., Rosendahl, C. & Kittler, H. The HAM10000 dataset, a large collection of multi-source dermatoscopic images of common pigmented skin lesions. Sci. Data 5, 180161 doi:10.1038/sdata.2018.161 (2018).
 
-"Training of neural networks for automated diagnosis of pigmented skin lesions is hampered by the small size and lack of diversity of available dataset of dermatoscopic images. We tackle this problem by releasing the HAM10000 ("Human Against Machine with 10000 training images") dataset. We collected dermatoscopic images from different populations, acquired and stored by different modalities. The final dataset consists of 10015 dermatoscopic images which can serve as a training set for academic machine learning purposes. Cases include a representative collection of all important diagnostic categories in the realm of pigmented lesions: Actinic keratoses and intraepithelial carcinoma / Bowen's disease (akiec), basal cell carcinoma (bcc), benign keratosis-like lesions (solar lentigines / seborrheic keratoses and lichen-planus like keratoses, bkl), dermatofibroma (df), melanoma (mel), melanocytic nevi (nv) and vascular lesions (angiomas, angiokeratomas, pyogenic granulomas and hemorrhage, vasc).
+A project for classifying skin lesions from dermatoscopic images by building a machine learning model.
 
-More than 50% of lesions are confirmed through histopathology (histo), the ground truth for the rest of the cases is either follow-up examination (follow_up), expert consensus (consensus), or confirmation by in-vivo confocal microscopy (confocal). The dataset includes lesions with multiple images, which can be tracked by the lesion_id-column within the HAM10000_metadata file.
 
-The test set is not public, but the evaluation server remains running (see the challenge website). Any publications written using the HAM10000 data should be evaluated on the official test set hosted there, so that methods can be fairly compared."
+## Project Overview
+This project implements a convolutional neural network for the classification of skin lesions across 7 different categories using the HAM10000 dataset. The model uses transfer learning with a pre-trained ResNet-18 backbone, achieving 66.1% accuracy on the test set.
+Dataset
+
+The model is trained on the HAM10000 ("Human Against Machine with 10000 training images") dataset, consisting of dermatoscopic images of pigmented skin lesions. The dataset includes 10015 images across 7 categories:
 
 Melanocytic nevi (nv)
 Melanoma (mel)
 Benign keratosis-like lesions (bkl)
 Basal cell carcinoma (bcc)
 Actinic keratoses (akiec)
-Vascular lesions (vas)
+Vascular lesions (vasc)
 Dermatofibroma (df)
 
+***
 
-Approach:
+## Set up & Installation
 
-Data Exploration & Preprocessing
+### Prerequisites:
 
--Understand the dataset structure
--Preprocess images (resizing, normalization)
--Handle class imbalance
--Split into train/validation/test sets
+Python 3.7+
+PyTorch 1.7+
+CUDA-capable GPU (recommended for training, will otherwise take significant amount of time!)
 
+### Setup
 
-Model Building
-
--Create a PyTorch dataset class
--Design a CNN architecture (or use transfer learning)
--Define loss function and optimizer
+Clone the repository:
+git clone https://github.com/Giant-Ice-Asteroid/Machine_Learning_Project_HAM10k
 
 
-Training Pipeline
+Create and activate a virtual environment:
+python -m venv .venv
+.venv\Scripts\activate
 
--Implement training loop with validation
--Add logging functionality
--Save model checkpoints
+Install dependencies:
+pip install -r requirements.txt
+
+Download the HAM10000 dataset and organize it as follows:
+data/
+├── HAM10000_metadata.csv
+└── lesion_images/
+    ├── HAM10000_images_part_1/
+    └── HAM10000_images_part_2/
 
 
-Evaluation & Visualization
+### Project Structure
+├── data/                      # Data directory (not included in repo!!)
+├── logs/                      # Training logs and model checkpoints
+├── src/                       # Source code
+│   ├── data_preparation.py    # Data loading and preprocessing
+│   ├── dataset_class.py       # PyTorch dataset implementation
+│   ├── evaluate.py            # Model evaluation and visualization
+│   ├── main.py                # Main training and evaluation script
+│   ├── model.py               # Model architecture definition
+│   ├── train.py               # Training loop implementation
+│   └── utils.py               # Utility functions
+├── runme.py                   # Runner script
+├── requirements.txt           # Python dependencies
+└── README.md                  # This file
 
--Evaluate on test set
--Visualize predictions and feature maps
--Analyze performance across classes
--Identify potential areas for improvement
+***
 
+## Usage
+
+### Training a Model
+To train the model from scratch:
+python runme.py --batch_size 16 --num_epochs 25 --lr 0.001
+
+### Evaluating a Model
+To evaluate a pre-trained model:
+python runme.py --eval_only --pretrained=logs/*YOUR_MODEL_FOLDER*/best_model.pt
+
+### Visualizing Results
+The evaluation process automatically generates:
+
+Confusion matrix
+Sample predictions (correct and incorrect)
+Feature map visualizations
+GradCAM visualizations
+
+All visualizations are saved to the logs directory.
+
+***
+
+## Data download:
+HAM10000 Dataset: https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/DBW86T
